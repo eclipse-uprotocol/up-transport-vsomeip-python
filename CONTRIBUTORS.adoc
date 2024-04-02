@@ -1,0 +1,11 @@
+= Eclipse uProtocol Contributors
+
+These are the contributors to Eclipse uProtocol uLink SOMEIP Python
+
+|===
+| GitHub username | Name
+
+|https://github.com/justinlhudson[Justin L. Hudson] |Justin L. Hudson
+|https://github.com/DivyaVuppala[Divya Vuppala] |Divya Vuppala
+
+|===
