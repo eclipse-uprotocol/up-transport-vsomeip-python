@@ -32,7 +32,7 @@ import time
 from builtins import str
 from concurrent.futures import Future
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, Final
 
 from someip_adapter import vsomeip
 from uprotocol.cloudevent.serialize.base64protobufserializer import Base64ProtobufSerializer
@@ -50,6 +50,8 @@ from uprotocol.uri.factory.uresource_builder import UResourceBuilder
 from uprotocol.uri.validator.urivalidator import UriValidator
 import logging
 
+from .helper import VsomeipHelper
+
 logger = logging.getLogger('vsomeip_transport' + '.' + __name__)
 log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
 logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
@@ -66,6 +68,8 @@ class VsomeipTransport(UTransport, RpcClient):
     _instances = {}
     _configuration = {}
 
+    EVENT_MASK: Final = 0x8000
+
     class VSOMEIPType(Enum):
         """
         Types of VSOMEIP Application Server/Client
@@ -73,16 +77,17 @@ class VsomeipTransport(UTransport, RpcClient):
         CLIENT = "Client"
         SERVICE = "Service"
 
-    def __init__(self, entity_type: VSOMEIPType = None,
-                 multicast: Tuple[str, int] = ('224.244.224.245', 30490)):
+    def __init__(self, multicast: Tuple[str, int] = ('224.244.224.245', 30490),
+                 helper: VsomeipHelper = VsomeipHelper()):
         """
         init
         """
         super().__init__()
-        self._type = entity_type
         self._multicast = multicast
 
         self._lock = threading.Lock()
+
+        self._helper = helper
 
         # Get structure and details from template to create configuration
         if not self._configuration:
@@ -93,15 +98,21 @@ class VsomeipTransport(UTransport, RpcClient):
             ) as handle:
                 self._configuration = json.load(handle)
 
-        self._start_services()
+        if self._helper.services_info():
+            self._create_services()
 
-    def _start_services(self):
+    @staticmethod
+    def _replace_special_chars(entity_name):
+        """
+        Replace . with _ to name the vsomeip application
+        """
+        return entity_name.replace('.', '_')
+
+    def _create_services(self):
         """
         Instantiate all COVESA Services
         """
-        services = VsomeipHelper.get_services_info()
-        if not services:
-            raise ValueError("Set Services info using VsomeipHelper Class")
+        services = self._helper.services_info()
 
         service_instances = []
         instance_id = 0x1111  # todo: uri.resource.id? what should be the instance id?
@@ -118,8 +129,10 @@ class VsomeipTransport(UTransport, RpcClient):
             self._configuration["service-discovery"]["port"] = str(
                 self._multicast[1])
 
-            for service_name, service_id in services.items():
-                service_name = VsomeipHelper.replace_special_chars(
+            for service in services:
+                service_name = service.Name
+                service_id = service.Id
+                service_name = self._replace_special_chars(
                     service_name
                 ) + '_' + VsomeipTransport.VSOMEIPType.SERVICE.value
                 if service_name not in self._instances:
@@ -155,11 +168,8 @@ class VsomeipTransport(UTransport, RpcClient):
         :param entity: uEntity object
         :param entity_type: client/service
         """
-        if self._type:
-            entity_type = self._type
-
         entity_id = entity.id
-        name = VsomeipHelper.replace_special_chars(entity.name) + '_' + entity_type.value
+        name = self._replace_special_chars(entity.name) + '_' + entity_type.value
 
         instance_id = 0x1111
         version = (0x00, 0x00)
@@ -184,7 +194,8 @@ class VsomeipTransport(UTransport, RpcClient):
                 instance.start()
 
                 self._instances[name] = instance
-        return self._instances[name]
+        if name in self._instances:
+            return self._instances[name]
 
     def _invoke_handler(self, message_type: int, method_id: int, data: bytearray) -> bytearray:
         """
@@ -219,7 +230,7 @@ class VsomeipTransport(UTransport, RpcClient):
         service_id = parsed_message.attributes.source.entity.id
         event_id = parsed_message.attributes.source.resource.id
         _, listener = self._registers[service_id][
-            VsomeipHelper.event_mask() + event_id]
+            self.EVENT_MASK + event_id]
         if listener:
             listener.on_receive(parsed_message)  # call actual callback now...
 
@@ -281,7 +292,7 @@ class VsomeipTransport(UTransport, RpcClient):
                 return status.to_status()
             instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
 
-            id_event = VsomeipHelper.event_mask() + uri.resource.id
+            id_event = self.EVENT_MASK + uri.resource.id
             payload_data = bytearray(message_str, encoding='utf-8')
             try:
                 instance.offer(events=[id_event])
@@ -335,7 +346,7 @@ class VsomeipTransport(UTransport, RpcClient):
         resource_id = uri.resource.id
         service_id = uri.entity.id
         if not is_method:  # if not method, then must be event!
-            resource_id = VsomeipHelper.event_mask() + resource_id  # event/method id
+            resource_id = self.EVENT_MASK + resource_id  # event/method id
 
         if service_id not in self._registers:
             self._registers[service_id] = {}
@@ -408,32 +419,3 @@ class VsomeipTransport(UTransport, RpcClient):
         self.send(message)
 
         return self._futures[rpc_method_id]
-
-
-class VsomeipHelper:
-    """
-    Vsomeip Helper class
-    """
-    services = {}
-
-    @staticmethod
-    def replace_special_chars(entity_name):
-        """
-        Replace . with _ to name the vsomeip application
-        """
-        return entity_name.replace('.', '_')
-
-    @staticmethod
-    def event_mask():
-        """
-        someip events start from 0x8000 to identify!
-        """
-        return 0x8000
-
-    @staticmethod
-    def get_services_info():
-        return VsomeipHelper.services
-
-    @staticmethod
-    def set_services_info(services):
-        VsomeipHelper.services = services

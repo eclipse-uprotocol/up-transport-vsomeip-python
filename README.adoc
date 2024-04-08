@@ -75,14 +75,14 @@ uPClient vsomeip Transport
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 
-# Define a dictionary of services and their ids (List all your services here)
-services = {"chassis.braking": 17, "body.access": 5}
+# Create a helper class and override the services_info method to set the mock services to be run by Vsomeip
+class Helper(VsomeipHelper):
 
-# Use the VsomeipHelper class to set the above services information
-VsomeipHelper().set_services_info(services)
+    def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
+        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5)]
 
-# Create an object of Vsomeip transport to use
-someip = VsomeipTransport()
+# Create an object of Vsomeip transport to use and pass on the above helper class created
+someip = VsomeipTransport(helper=Helper())
 ----
 
 ==== Publish/Subscribe

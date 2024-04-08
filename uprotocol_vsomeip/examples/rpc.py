@@ -24,6 +24,7 @@
 #
 # -------------------------------------------------------------------------
 import time
+from typing import List
 
 from google.protobuf import any_pb2
 from uprotocol.proto.uattributes_pb2 import UPriority
@@ -41,9 +42,14 @@ from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from target.protofiles.vehicle.chassis.braking.v1 import braking_service_pb2
 
-services = {"chassis.braking": 17}
-VsomeipHelper().set_services_info(services)
-someip = VsomeipTransport()
+
+class Helper(VsomeipHelper):
+
+    def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
+        return [VsomeipHelper.UEntityInfo(Name="chassis.braking", Id=17)]
+
+
+someip = VsomeipTransport(helper=Helper())
 
 
 class RPCRequestListener(UListener):

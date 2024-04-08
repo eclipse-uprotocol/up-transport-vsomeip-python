@@ -25,6 +25,7 @@
 # -------------------------------------------------------------------------
 import time
 import socket
+from typing import List
 
 from uprotocol.transport.ulistener import UListener
 from uprotocol.proto.uri_pb2 import UUri
@@ -40,9 +41,14 @@ from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 from target.protofiles.vehicle.body.cabin_climate.v1 import cabin_climate_topics_pb2
 
-services = {"body.cabin_climate": 5}
-VsomeipHelper().set_services_info(services)
-someip = VsomeipTransport()
+
+class Helper(VsomeipHelper):
+
+    def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
+        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5)]
+
+
+someip = VsomeipTransport(helper=Helper())
 
 
 def publish():
