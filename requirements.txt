@@ -1,2 +1,1 @@
 up-python==0.1.1-dev0
-someip_adapter @ git+https://github.com/justinlhudson/someip_adapter.git@main

@@ -1,0 +1,3 @@
+[submodule "someip_adapter"]
+	path = someip_adapter
+	url = https://github.com/justinlhudson/someip_adapter.git

@@ -24,28 +24,26 @@
 #
 # -------------------------------------------------------------------------
 import os
-import sys
-from setuptools import Extension, setup, find_packages
+from setuptools import setup, find_packages
+from someip_adapter.setup import vsomeip_extension
 
-project_name = 'uprotocol-vsomeip-python'
-
-script_directory = os.path.realpath(os.path.dirname(__file__))
 REQUIREMENTS = [i.strip() for i in open(os.path.join("requirements.txt")).readlines()]
 
+package_name = "uprotocol_vsomeip"
+
 setup(
-    name=project_name,
+    name=package_name,
     version='0.1',
     python_requires='>=3.8',
     description='',
     author='',
     author_email='',
     data_files=[],
-    packages=find_packages(exclude=['**/*.cpp']),
+    packages=find_packages() + ["someip_adapter"],
+    package_dir={'someip_adapter': './someip_adapter'},
     include_package_data=True,  # see MANIFEST.in
     dependency_links=[],
     install_requires=REQUIREMENTS,
-    cmdclass={},
     license='LICENSE.txt',
-    long_description=open('README.adoc').read(),
-    ext_modules=[],
+    ext_modules=[vsomeip_extension],
 )
