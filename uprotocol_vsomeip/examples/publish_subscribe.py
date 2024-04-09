@@ -45,7 +45,7 @@ from target.protofiles.vehicle.body.cabin_climate.v1 import cabin_climate_topics
 class Helper(VsomeipHelper):
 
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
-        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5)]
+        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5, Events=[0, 1, 2, 3, 4, 5, 6, 7, 8, 10], Port=30509)]
 
 
 someip = VsomeipTransport(helper=Helper())

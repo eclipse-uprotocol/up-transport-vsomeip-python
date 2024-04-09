@@ -46,7 +46,7 @@ from target.protofiles.vehicle.chassis.braking.v1 import braking_service_pb2
 class Helper(VsomeipHelper):
 
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
-        return [VsomeipHelper.UEntityInfo(Name="chassis.braking", Id=17)]
+        return [VsomeipHelper.UEntityInfo(Name="chassis.braking", Id=17, Events=[0, 10, 11], Port=30511)]
 
 
 someip = VsomeipTransport(helper=Helper())

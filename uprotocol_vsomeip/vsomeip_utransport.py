@@ -114,7 +114,7 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         services = self._helper.services_info()
 
-        service_instances = []
+        service_instances = {}
         instance_id = 0x1111  # todo: uri.resource.id? what should be the instance id?
         # version = (entity.version_major if entity.version_major else 0x00,
         #            entity.version_minor if entity.version_minor else 0x00)
@@ -144,6 +144,7 @@ class VsomeipTransport(UTransport, RpcClient):
                     self._configuration["services"].append({
                         'instance': str(instance_id),
                         'service': str(service_id),
+                        'unreliable': str(service.Port)
                     })
 
                     instance = vsomeip.SOMEIP(
@@ -152,13 +153,18 @@ class VsomeipTransport(UTransport, RpcClient):
                         instance=instance_id,
                         configuration=self._configuration,
                         version=version)
-                    service_instances.append(instance)
+                    if service_id not in service_instances:
+                        service_instances[service_id] = {}
+                    service_instances[service_id]["instance"] = instance
+                    service_instances[service_id]["events"] = service.Events
                     self._instances[service_name] = instance
 
-            for service in service_instances:
-                service.create()
-                service.offer()
-                service.start()
+            for id, service in service_instances.items():
+                service["instance"].create()
+                service["instance"].offer()
+                service["instance"].start()
+
+                service["instance"].offer(events=[self.EVENT_MASK+event_id for event_id in service["events"]])
 
     def _get_instance(self, entity: UEntity,
                       entity_type: VSOMEIPType) -> vsomeip.SOMEIP:

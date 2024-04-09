@@ -13,6 +13,8 @@ class VsomeipHelper:
         """
         Name: str
         Id: int
+        Events: List[int]
+        Port: int
 
     def services_info(self) -> List[UEntityInfo]:
         return []
