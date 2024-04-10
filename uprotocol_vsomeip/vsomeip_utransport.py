@@ -69,6 +69,8 @@ class VsomeipTransport(UTransport, RpcClient):
     _configuration = {}
 
     EVENT_MASK: Final = 0x8000
+    INSTANCE_ID: Final = 0x0000
+    MINOR_VERSION: Final = 0x0000
 
     class VSOMEIPType(Enum):
         """
@@ -115,10 +117,6 @@ class VsomeipTransport(UTransport, RpcClient):
         services = self._helper.services_info()
 
         service_instances = {}
-        instance_id = 0x1111  # todo: uri.resource.id? what should be the instance id?
-        # version = (entity.version_major if entity.version_major else 0x00,
-        #            entity.version_minor if entity.version_minor else 0x00)
-        version = (0x00, 0x00)  # until changed in sdv autoloader to consider service major minor versions
         ip_addr = "127.0.0.1"  # todo?: ipaddress.IPv4Address(uri.authority.ip)
         if is_windows:  # note: vsomeip needs actual address not localhost
             ip_addr = str(socket.gethostbyname(socket.gethostname()))
@@ -142,7 +140,7 @@ class VsomeipTransport(UTransport, RpcClient):
                     })
 
                     self._configuration["services"].append({
-                        'instance': str(instance_id),
+                        'instance': str(self.INSTANCE_ID),
                         'service': str(service_id),
                         'unreliable': str(service.Port)
                     })
@@ -150,9 +148,9 @@ class VsomeipTransport(UTransport, RpcClient):
                     instance = vsomeip.SOMEIP(
                         name=service_name,
                         id=service_id,
-                        instance=instance_id,
+                        instance=self.INSTANCE_ID,
                         configuration=self._configuration,
-                        version=version)
+                        version=(service.MajorVersion, self.MINOR_VERSION))
                     if service_id not in service_instances:
                         service_instances[service_id] = {}
                     service_instances[service_id]["instance"] = instance
@@ -176,9 +174,6 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         entity_id = entity.id
         name = self._replace_special_chars(entity.name) + '_' + entity_type.value
-
-        instance_id = 0x1111
-        version = (0x00, 0x00)
         with self._lock:
             if name not in self._instances and entity_type == VsomeipTransport.VSOMEIPType.CLIENT:
                 self._configuration["applications"].append({
@@ -186,15 +181,15 @@ class VsomeipTransport(UTransport, RpcClient):
                     'name': name
                 })
                 self._configuration["clients"].append({
-                    'instance': str(instance_id),
+                    'instance': str(self.INSTANCE_ID),
                     'service': str(entity_id),
                 })
                 instance = vsomeip.SOMEIP(
                     name=name,
                     id=entity_id,
-                    instance=instance_id,
+                    instance=self.INSTANCE_ID,
                     configuration=self._configuration,
-                    version=version)
+                    version=(entity.version_major, self.MINOR_VERSION))
                 instance.create()
                 instance.register()
                 instance.start()
@@ -417,7 +412,6 @@ class VsomeipTransport(UTransport, RpcClient):
                             "UMESSAGE_TYPE_REQUEST")
 
         instance = self._get_instance(method_uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
-        time.sleep(0.0000000000025)  # As request is sent before client is instantiated
         rpc_method_id = method_uri.resource.id
         self._futures[rpc_method_id] = Future()
         instance.on_message(rpc_method_id, self._invoke_handler)

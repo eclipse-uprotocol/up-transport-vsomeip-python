@@ -15,6 +15,7 @@ class VsomeipHelper:
         Id: int
         Events: List[int]
         Port: int
+        MajorVersion: int
 
     def services_info(self) -> List[UEntityInfo]:
         return []
