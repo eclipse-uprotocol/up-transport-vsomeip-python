@@ -41,7 +41,7 @@ from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload
 from uprotocol.proto.uri_pb2 import UEntity, UUri
 from uprotocol.proto.ustatus_pb2 import UStatus, UCode
-from uprotocol.rpc.calloptions import CallOptions
+from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.rpc.rpcclient import RpcClient
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
@@ -198,7 +198,7 @@ class VsomeipTransport(UTransport, RpcClient):
         if name in self._instances:
             return self._instances[name]
 
-    def _invoke_handler(self, message_type: int, method_id: int, data: bytearray) -> bytearray:
+    def _invoke_handler(self, message_type: int, service_id: int, method_id: int, data: bytearray) -> bytearray:
         """
         callback for RPC method to set Future
         """
@@ -209,13 +209,16 @@ class VsomeipTransport(UTransport, RpcClient):
         parsed_message = UMessage()
         parsed_message.ParseFromString(
             Base64ProtobufSerializer().serialize(decoded_data))
-        future_result = self._futures[method_id]
+
+        future_result = self._futures[service_id][method_id]
+        # todo: remove from a queue instead???
+
         if not future_result.done():
-            self._futures[method_id].set_result(parsed_message)
+            future_result.set_result(parsed_message)
         else:
             print("Future result state is already finished or cancelled")
 
-    def _on_event_handler(self, message_type: int, __: int, data: bytearray) -> bytearray:
+    def _on_event_handler(self, message_type: int, _: int, __: int, data: bytearray) -> bytearray:
         """
         handle responses from service with callback to listener registered
         """
@@ -235,7 +238,7 @@ class VsomeipTransport(UTransport, RpcClient):
         if listener:
             listener.on_receive(parsed_message)  # call actual callback now...
 
-    def _on_rpc_method_handler(self, message_type: int, __: int, data: bytearray) -> bytearray:
+    def _on_rpc_method_handler(self, message_type: int, _: int, __: int, data: bytearray) -> bytearray:
         """
         handle responses from service with callback to listener registered
         """
@@ -255,7 +258,7 @@ class VsomeipTransport(UTransport, RpcClient):
             listener.on_receive(parsed_message)  # call actual callback now...
         return None
 
-    def _on_response_handler(self, message_type: int, method_id: int, __: bytearray) -> bytearray:
+    def _on_response_handler(self, message_type: int, _: int, method_id: int, __: bytearray) -> bytearray:
         """
         Return from the send response set for the response
         """
@@ -397,7 +400,7 @@ class VsomeipTransport(UTransport, RpcClient):
             raise Exception("Payload is None")
         if options is None:
             raise Exception("CallOptions cannot be None")
-        timeout = options.get_timeout()
+        timeout = options.ttl
         if timeout <= 0:
             raise Exception("TTl is invalid or missing")
 
@@ -406,16 +409,15 @@ class VsomeipTransport(UTransport, RpcClient):
         attributes = UAttributesBuilder.request(source,
                                                 method_uri,
                                                 UPriority.UPRIORITY_CS4,
-                                                options.get_timeout()).build()
-        if attributes.type != UMessageType.UMESSAGE_TYPE_REQUEST:
-            raise Exception("Attributes built for Invoking must be of type "
-                            "UMESSAGE_TYPE_REQUEST")
-
+                                                options.ttl).build()
         instance = self._get_instance(method_uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
         rpc_method_id = method_uri.resource.id
-        self._futures[rpc_method_id] = Future()
+        service_id = method_uri.entity.id
+        if not service_id in self._futures:
+            self._futures[service_id] = {}
+        self._futures[service_id][rpc_method_id] = Future()  # todo: make queue?
         instance.on_message(rpc_method_id, self._invoke_handler)
         message = UMessage(attributes=attributes, payload=request_payload)
         self.send(message)
 
-        return self._futures[rpc_method_id]
+        return self._futures[service_id][rpc_method_id]

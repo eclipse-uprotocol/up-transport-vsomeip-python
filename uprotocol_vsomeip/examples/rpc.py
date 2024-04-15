@@ -33,14 +33,14 @@ from uprotocol.proto.upayload_pb2 import UPayload
 from uprotocol.proto.upayload_pb2 import UPayloadFormat
 from uprotocol.proto.uri_pb2 import UEntity
 from uprotocol.proto.uri_pb2 import UUri
-from uprotocol.rpc.calloptions import CallOptions
+from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
 from uprotocol.uri.factory.uresource_builder import UResourceBuilder
 from uprotocol.uuid.factory.uuidfactory import Factories
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
-from target.protofiles.vehicle.chassis.braking.v1 import braking_service_pb2
+from target.protofiles.ultifi.vehicle.chassis.braking.v1 import braking_service_pb2
 
 
 class Helper(VsomeipHelper):
@@ -82,8 +82,7 @@ def client():
     u_entity = UEntity(name='chassis.braking', id=17, version_major=1, version_minor=0)
     u_resource = UResourceBuilder.for_rpc_request("ResetHealth", id=1)
     method_uri = UUri(entity=u_entity, resource=u_resource)
-
-    res_future = someip.invoke_method(method_uri, payload, CallOptions())
+    res_future = someip.invoke_method(method_uri, payload, CallOptions(ttl=15000))
 
     while not res_future.done():
         time.sleep(1)

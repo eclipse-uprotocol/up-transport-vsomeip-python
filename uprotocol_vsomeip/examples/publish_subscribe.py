@@ -39,7 +39,7 @@ from uprotocol.proto.upayload_pb2 import UPayloadFormat, UPayload
 from uprotocol.proto.uattributes_pb2 import UAttributes, UMessageType, UPriority
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
-from target.protofiles.vehicle.body.cabin_climate.v1 import cabin_climate_topics_pb2
+from target.protofiles.ultifi.vehicle.body.cabin_climate.v1 import climate_control_topics_pb2
 
 
 class Helper(VsomeipHelper):
@@ -52,9 +52,9 @@ someip = VsomeipTransport(helper=Helper())
 
 
 def publish():
-    protoobj = cabin_climate_topics_pb2.Zone()
-    protoobj.fan_speed = 4
-    protoobj.is_power_on = True
+    protoobj = climate_control_topics_pb2.Zone()
+    protoobj.power_on = True
+    protoobj.blower_level = 3
     any_obj = any_pb2.Any()
     any_obj.Pack(protoobj)
     payload_data = any_obj.SerializeToString()
@@ -78,8 +78,8 @@ def subscribe():
     u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
     u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
     uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
-    listener1 = myListener()
-    someip.register_listener(uri, listener1)
+    listener = myListener()
+    someip.register_listener(uri, listener)
 
 
 if __name__ == '__main__':

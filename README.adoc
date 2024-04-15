@@ -79,7 +79,7 @@ from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 class Helper(VsomeipHelper):
 
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
-        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5)]
+        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5, Events=[0, 1, 2, 3, 4, 5, 6, 7, 8, 10], Port=30509, MajorVersion=1)]
 
 # Create an object of Vsomeip transport to use and pass on the above helper class created
 someip = VsomeipTransport(helper=Helper())
@@ -90,9 +90,9 @@ someip = VsomeipTransport(helper=Helper())
 [source]
 ----
 def publish():
-    protoobj = cabin_climate_topics_pb2.Zone()
-    protoobj.fan_speed = 4
-    protoobj.is_power_on = True
+    protoobj = climate_control_topics_pb2.Zone()
+    protoobj.power_on = True
+    protoobj.blower_level = 3
     any_obj = any_pb2.Any()
     any_obj.Pack(protoobj)
     payload_data = any_obj.SerializeToString()
@@ -116,8 +116,8 @@ def subscribe():
     u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
     u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
     uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
-    listener1 = myListener()
-    someip.register_listener(uri, listener1)
+    listener = myListener()
+    someip.register_listener(uri, listener)
 
 
 if __name__ == '__main__':
@@ -161,8 +161,7 @@ def client():
     u_entity = UEntity(name='chassis.braking', id=17, version_major=1, version_minor=0)
     u_resource = UResourceBuilder.for_rpc_request("ResetHealth", id=1)
     method_uri = UUri(entity=u_entity, resource=u_resource)
-
-    res_future = someip.invoke_method(method_uri, payload, CallOptions())
+    res_future = someip.invoke_method(method_uri, payload, CallOptions(ttl=15000))
 
     while not res_future.done():
         time.sleep(1)
