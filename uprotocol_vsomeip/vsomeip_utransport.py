@@ -79,7 +79,7 @@ class VsomeipTransport(UTransport, RpcClient):
         CLIENT = "Client"
         SERVICE = "Service"
 
-    def __init__(self, multicast: Tuple[str, int] = ('224.244.224.245', 30490),
+    def __init__(self, source: UUri = UUri(), multicast: Tuple[str, int] = ('224.244.224.245', 30490),
                  helper: VsomeipHelper = VsomeipHelper()):
         """
         init
@@ -90,6 +90,7 @@ class VsomeipTransport(UTransport, RpcClient):
         self._lock = threading.Lock()
 
         self._helper = helper
+        self._source = source
 
         # Get structure and details from template to create configuration
         if not self._configuration:
@@ -404,8 +405,7 @@ class VsomeipTransport(UTransport, RpcClient):
         if timeout <= 0:
             raise Exception("TTl is invalid or missing")
 
-        source = UUri(entity=UEntity(name="simulator", version_major=1),
-                      resource=UResourceBuilder.for_rpc_response())
+        source = self._source
         attributes = UAttributesBuilder.request(source,
                                                 method_uri,
                                                 UPriority.UPRIORITY_CS4,
