@@ -78,6 +78,7 @@ def client():
     reset_request = braking_service_pb2.ResetHealthRequest(name="brake_pads.front")
     any_obj.Pack(reset_request)
     payload_data = any_obj.SerializeToString()
+    print(payload_data)
     payload = UPayload(value=payload_data, format=hint)
     u_entity = UEntity(name='chassis.braking', id=17, version_major=1, version_minor=0)
     u_resource = UResourceBuilder.for_rpc_request("ResetHealth", id=1)

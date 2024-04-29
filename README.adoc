@@ -33,7 +33,7 @@ sudo ldconfig
 
 ==== Windows
 1. Install boost - https://sourceforge.net/projects/boost/files/boost-binaries/1.65.0/boost_1_65_0-msvc-14.1-64.exe/download
-2. Install Visual Studio - With Development with C++ options
+2. Install Visual Studio (any edition) - With Development with C++ options: https://learn.microsoft.com/en-us/cpp/build/vscpp-step-0-installation?view=msvc-170
 3. Clone the forked vsomeip repo https://github.com/justinlhudson/vsomeip
 4. Open the local folder vsomeip in Visual Studio
 5. Right click on cmakeLists.txt and click Build - generates build files in a folder called out -> build -> x64-Debug (dll files)

@@ -34,11 +34,13 @@ from concurrent.futures import Future
 from enum import Enum
 from typing import Tuple, Final
 
+from google.protobuf import any_pb2
 from someip_adapter import vsomeip
 from uprotocol.cloudevent.serialize.base64protobufserializer import Base64ProtobufSerializer
-from uprotocol.proto.uattributes_pb2 import UMessageType, UPriority
+from uprotocol.proto.uattributes_pb2 import UMessageType, UPriority, UAttributes
 from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload
+from uprotocol.proto.upayload_pb2 import UPayloadFormat
 from uprotocol.proto.uri_pb2 import UEntity, UUri
 from uprotocol.proto.ustatus_pb2 import UStatus, UCode
 from uprotocol.proto.uattributes_pb2 import CallOptions
@@ -49,6 +51,9 @@ from uprotocol.transport.utransport import UTransport
 from uprotocol.uri.factory.uresource_builder import UResourceBuilder
 from uprotocol.uri.validator.urivalidator import UriValidator
 import logging
+
+from uprotocol.uuid.factory.uuidfactory import Factories
+from uprotocol.uuid.serializer.longuuidserializer import LongUuidSerializer
 
 from .helper import VsomeipHelper
 
@@ -67,6 +72,7 @@ class VsomeipTransport(UTransport, RpcClient):
     _responses = {}
     _instances = {}
     _configuration = {}
+    _requests = {}
 
     EVENT_MASK: Final = 0x8000
     INSTANCE_ID: Final = 0x0000
@@ -199,27 +205,36 @@ class VsomeipTransport(UTransport, RpcClient):
         if name in self._instances:
             return self._instances[name]
 
-    def _invoke_handler(self, message_type: int, service_id: int, method_id: int, data: bytearray) -> bytearray:
+    def _invoke_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
         """
         callback for RPC method to set Future
         """
+        logger.debug(f"_invoke_handler")
         # not want to hear from self!!!
-        if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
+        if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:  # want the response, else getting echo!
             return
-        decoded_data = data.decode('utf-8')
-        parsed_message = UMessage()
-        parsed_message.ParseFromString(
-            Base64ProtobufSerializer().serialize(decoded_data))
 
-        future_result = self._futures[service_id][method_id]
-        # todo: remove from a queue instead???
+        uuid = self._requests[request_id].attributes.id
+
+        payload_data: UPayload = UPayload()
+        payload_data.ParseFromString(data)
+        logger.debug(f"{payload_data}")
+        parsed_message = UMessage()
+        parsed_message.payload.CopyFrom(payload_data)
+
+        attributes: UAttributes = UAttributes()
+        attributes.reqid = uuid
+        logger.debug(f"{attributes}")
+        parsed_message.attributes.CopyFrom(attributes)
+        logger.debug(f"{parsed_message}")
+        future_result = self._futures[uuid]
 
         if not future_result.done():
             future_result.set_result(parsed_message)
         else:
             print("Future result state is already finished or cancelled")
 
-    def _on_event_handler(self, message_type: int, _: int, __: int, data: bytearray) -> bytearray:
+    def _on_event_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
         """
         handle responses from service with callback to listener registered
         """
@@ -232,6 +247,11 @@ class VsomeipTransport(UTransport, RpcClient):
         parsed_message.ParseFromString(
             Base64ProtobufSerializer().serialize(decoded_data)
         )
+        # payload_data: UPayload = UPayload()
+        # payload_data.ParseFromString(data)
+        # parsed_message = UMessage()
+        # parsed_message.payload.CopyFrom(payload_data)
+
         service_id = parsed_message.attributes.source.entity.id
         event_id = parsed_message.attributes.source.resource.id
         _, listener = self._registers[service_id][
@@ -239,27 +259,39 @@ class VsomeipTransport(UTransport, RpcClient):
         if listener:
             listener.on_receive(parsed_message)  # call actual callback now...
 
-    def _on_rpc_method_handler(self, message_type: int, _: int, __: int, data: bytearray) -> bytearray:
+    def _on_rpc_method_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
         """
         handle responses from service with callback to listener registered
         """
+
         # not want to hear from self!!!
         if message_type != vsomeip.SOMEIP.Message_Type.REQUEST.value:
             return
 
-        decoded_data = data.decode('utf-8')
-        parsed_message = UMessage()
-        parsed_message.ParseFromString(
-            Base64ProtobufSerializer().serialize(decoded_data)
+        payload_data = bytes(data)
+        message = self._requests[request_id]  # Note: is mem shared copy
+
+        payload = message.payload
+        if message.payload.value != payload_data:
+            # todo: this is failing, fixme???
+            hint = UPayloadFormat.UPAYLOAD_FORMAT_UNSPECIFIED
+            payload = UPayload(value=payload_data, hint=hint)
+
+        parsed_message = UMessage(
+            payload=payload,
+            attributes=message.attributes
         )
+        # id - unique ID
+        # reqid - the one received from received message , set it to new message and send
         service_id = parsed_message.attributes.sink.entity.id
         method_id = parsed_message.attributes.sink.resource.id
         _, listener = self._registers[service_id][method_id]
         if listener:
             listener.on_receive(parsed_message)  # call actual callback now...
+
         return None
 
-    def _on_response_handler(self, message_type: int, _: int, method_id: int, __: bytearray) -> bytearray:
+    def _on_response_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
         """
         Return from the send response set for the response
         """
@@ -268,18 +300,17 @@ class VsomeipTransport(UTransport, RpcClient):
             return
 
         timedout = 100
+        logger.debug(f"_on_response_handler, req id {request_id}")
         while True:  # todo: with locks instead, guessing on a timeout for now
-            if method_id in self._responses and self._responses[method_id]:
+            if request_id in self._responses and self._responses[request_id]:
                 break
             timedout = timedout - 1
             if timedout < 0:
                 break
             time.sleep(0.025)
-
-        if method_id in self._responses:
-            temp = bytearray(self._responses[method_id])
-            del self._responses[method_id]
-            return temp
+        logger.debug(f"_on_response_handler, responses {self._responses}")
+        if request_id in self._responses:
+            return data  # note:  return data is what is sent over transport (i.e. someip) as response
         return None
 
     def send(self, message: UMessage) -> UStatus:
@@ -289,7 +320,6 @@ class VsomeipTransport(UTransport, RpcClient):
         :param message: UMessage to be sent.
         :return: UStatus with UCode set to the status code (successful or failure).
         """
-        message_str = Base64ProtobufSerializer().deserialize(message.SerializeToString())
         if message.attributes.type == UMessageType.UMESSAGE_TYPE_PUBLISH:
             uri = message.attributes.source
             status = UriValidator.validate(uri)
@@ -298,7 +328,7 @@ class VsomeipTransport(UTransport, RpcClient):
             instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
 
             id_event = self.EVENT_MASK + uri.resource.id
-            payload_data = bytearray(message_str, encoding='utf-8')
+            payload_data = bytearray(message.payload.value)
             try:
                 instance.offer(events=[id_event])
                 if payload_data:
@@ -307,6 +337,7 @@ class VsomeipTransport(UTransport, RpcClient):
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)
             return UStatus(message="publish", code=UCode.OK)
         if message.attributes.type == UMessageType.UMESSAGE_TYPE_REQUEST:
+            logger.debug("SEND REQUEST")
             uri = message.attributes.sink
             status = UriValidator.validate(uri)
             if status.is_failure():
@@ -314,21 +345,27 @@ class VsomeipTransport(UTransport, RpcClient):
             instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
 
             id_method = uri.resource.id
-            payload_data = bytearray(message_str, encoding='utf-8')
+            payload_data = bytearray(message.payload.value)
             try:
-                instance.request(id=id_method, data=payload_data)
+                request_id = instance.request(id=id_method, data=payload_data)
+                logger.debug(f"request_id {request_id}")
+                self._requests[request_id] = message  # Important: in memory ONLY, thus stored per application level, not information based in payload
             except Exception as ex:
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)
             return UStatus(message="request", code=UCode.OK)
         if message.attributes.type == UMessageType.UMESSAGE_TYPE_RESPONSE:
+            logger.debug("SEND RESPONSE")
             uri = message.attributes.source
             status = UriValidator.validate(uri)
             if status.is_failure():
                 return status.to_status()
-            id_message = uri.resource.id
-            payload_data = bytearray(message_str, encoding='utf-8')
+            # id_message = uri.resource.id
+            payload_data = bytearray(message.payload.value)
+            logger.debug(payload_data)
+            req_id = LongUuidSerializer.instance().serialize(message.attributes.reqid)
+            logger.debug(req_id)
             try:
-                self._responses[id_message] = payload_data
+                self._responses[req_id] = payload_data
             except NotImplementedError as ex:
                 raise ex
             except Exception as ex:
@@ -360,8 +397,8 @@ class VsomeipTransport(UTransport, RpcClient):
         try:
             if is_method:
                 instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
-                instance.on_message(resource_id, self._on_rpc_method_handler)
-                instance.on_message(resource_id, self._on_response_handler)
+                instance.on_message(resource_id, self._on_rpc_method_handler)  # handles the UListener
+                ##########instance.on_message(resource_id, self._on_response_handler)  # handles returning a response of data
             else:
                 instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
                 instance.on_event(resource_id, self._on_event_handler)
@@ -395,15 +432,16 @@ class VsomeipTransport(UTransport, RpcClient):
 
         :return: Returns the CompletableFuture with the result or exception.
         """
+        logger.debug("INVOKE METHOD")
         if method_uri is None or method_uri == UUri():
-            raise Exception("Method Uri is empty")
+            raise ValueError("Method Uri is empty")
         if request_payload is None:
-            raise Exception("Payload is None")
+            raise ValueError("Payload is None")
         if options is None:
-            raise Exception("CallOptions cannot be None")
+            raise ValueError("Call Options cannot be None")
         timeout = options.ttl
         if timeout <= 0:
-            raise Exception("TTl is invalid or missing")
+            raise ValueError("TTl is invalid or missing")
 
         source = self._source
         attributes = UAttributesBuilder.request(source,
@@ -412,12 +450,10 @@ class VsomeipTransport(UTransport, RpcClient):
                                                 options.ttl).build()
         instance = self._get_instance(method_uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
         rpc_method_id = method_uri.resource.id
-        service_id = method_uri.entity.id
-        if not service_id in self._futures:
-            self._futures[service_id] = {}
-        self._futures[service_id][rpc_method_id] = Future()  # todo: make queue?
+        uuid = LongUuidSerializer.instance().serialize(attributes.id)
+        self._futures[uuid] = Future()
         instance.on_message(rpc_method_id, self._invoke_handler)
         message = UMessage(attributes=attributes, payload=request_payload)
         self.send(message)
 
-        return self._futures[service_id][rpc_method_id]
+        return self._futures[uuid]
