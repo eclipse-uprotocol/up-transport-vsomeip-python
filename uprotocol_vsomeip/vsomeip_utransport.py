@@ -264,7 +264,6 @@ class VsomeipTransport(UTransport, RpcClient):
         handle responses from service with callback to listener registered
         """
 
-        # not want to hear from self!!!
         if message_type != vsomeip.SOMEIP.Message_Type.REQUEST.value:
             return
 
@@ -291,27 +290,36 @@ class VsomeipTransport(UTransport, RpcClient):
 
         return None
 
-    def _on_response_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
+    def _for_response_handler(self, message_type: int, service_id: int, method_id: int, _: bytearray, request_id: int) -> bytearray:
         """
-        Return from the send response set for the response
+        Return from the send response set for the response of the initial request message
         """
-        # not want to hear from self!!!
-        if message_type != vsomeip.SOMEIP.Message_Type.REQUEST.value:
-            return
 
-        timedout = 100
-        logger.debug(f"_on_response_handler, req id {request_id}")
+        if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
+            return None  # do nothing
+
+        response_data = None
+
+        timed_out = 100
         while True:  # todo: with locks instead, guessing on a timeout for now
-            if request_id in self._responses and self._responses[request_id]:
-                break
-            timedout = timedout - 1
-            if timedout < 0:
+            timed_out = timed_out - 1
+            if timed_out < 0:
                 break
             time.sleep(0.025)
-        logger.debug(f"_on_response_handler, responses {self._responses}")
-        if request_id in self._responses:
-            return data  # note:  return data is what is sent over transport (i.e. someip) as response
-        return None
+
+            if service_id not in self._responses:
+                continue
+            if method_id not in self._responses[service_id]:
+                continue
+            if not self._responses[service_id][method_id]:  # empty
+                continue
+
+            response_data = self._responses[service_id][method_id][0]
+            del self._responses[service_id][method_id][0]
+            break
+
+        logger.debug(f"_for_response_handler, responses {response_data}")
+        return response_data  # note:  return data is what is sent over transport (i.e. someip) as response
 
     def send(self, message: UMessage) -> UStatus:
         """
@@ -359,13 +367,20 @@ class VsomeipTransport(UTransport, RpcClient):
             status = UriValidator.validate(uri)
             if status.is_failure():
                 return status.to_status()
-            # id_message = uri.resource.id
+
+            instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
+            id_service = instance._id
+            id_message = uri.resource.id
             payload_data = bytearray(message.payload.value)
             logger.debug(payload_data)
             req_id = LongUuidSerializer.instance().serialize(message.attributes.reqid)
             logger.debug(req_id)
             try:
-                self._responses[req_id] = payload_data
+                if id_service not in self._responses:
+                    self._responses[id_service] = {}
+                if id_message not in self._responses[id_service]:
+                    self._responses[id_service][id_message] = []
+                self._responses[id_service][id_message].append(payload_data)
             except NotImplementedError as ex:
                 raise ex
             except Exception as ex:
@@ -398,7 +413,7 @@ class VsomeipTransport(UTransport, RpcClient):
             if is_method:
                 instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
                 instance.on_message(resource_id, self._on_rpc_method_handler)  # handles the UListener
-                ##########instance.on_message(resource_id, self._on_response_handler)  # handles returning a response of data
+                instance.on_message(resource_id, self._for_response_handler)  # handles returning a response of data
             else:
                 instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
                 instance.on_event(resource_id, self._on_event_handler)
