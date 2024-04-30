@@ -57,9 +57,7 @@ from uprotocol.uuid.serializer.longuuidserializer import LongUuidSerializer
 
 from .helper import VsomeipHelper
 
-logger = logging.getLogger('vsomeip_transport' + '.' + __name__)
-log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
-logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
+logger = logging.getLogger('vsomeip_utransport' + '.' + __name__)
 is_windows = sys.platform.startswith('win')
 
 
@@ -73,6 +71,7 @@ class VsomeipTransport(UTransport, RpcClient):
     _instances = {}
     _configuration = {}
     _requests = {}
+    _lock = threading.Lock()
 
     EVENT_MASK: Final = 0x8000
     INSTANCE_ID: Final = 0x0000
@@ -93,13 +92,11 @@ class VsomeipTransport(UTransport, RpcClient):
         super().__init__()
         self._multicast = multicast
 
-        self._lock = threading.Lock()
-
         self._helper = helper
         self._source = source
 
-        # Get structure and details from template to create configuration
         if not self._configuration:
+            # Get structure and details from template to create configuration
             with open(
                     os.path.join(os.path.realpath(os.path.dirname(__file__)), 'templates', 'vsomeip_template.json'),
                     "r",
@@ -111,11 +108,11 @@ class VsomeipTransport(UTransport, RpcClient):
             self._create_services()
 
     @staticmethod
-    def _replace_special_chars(entity_name):
+    def _replace_special_chars(string):
         """
         Replace . with _ to name the vsomeip application
         """
-        return entity_name.replace('.', '_')
+        return string.replace('.', '_')
 
     def _create_services(self):
         """
@@ -127,6 +124,7 @@ class VsomeipTransport(UTransport, RpcClient):
         ip_addr = "127.0.0.1"  # todo?: ipaddress.IPv4Address(uri.authority.ip)
         if is_windows:  # note: vsomeip needs actual address not localhost
             ip_addr = str(socket.gethostbyname(socket.gethostname()))
+
         with self._lock:
             self._configuration["unicast"] = str(ip_addr)
             self._configuration["service-discovery"]["multicast"] = str(
@@ -242,15 +240,11 @@ class VsomeipTransport(UTransport, RpcClient):
         if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
             return
 
-        decoded_data = data.decode('utf-8')
+        decoded_data = data.decode()
         parsed_message = UMessage()
         parsed_message.ParseFromString(
             Base64ProtobufSerializer().serialize(decoded_data)
         )
-        # payload_data: UPayload = UPayload()
-        # payload_data.ParseFromString(data)
-        # parsed_message = UMessage()
-        # parsed_message.payload.CopyFrom(payload_data)
 
         service_id = parsed_message.attributes.source.entity.id
         event_id = parsed_message.attributes.source.resource.id
@@ -272,7 +266,6 @@ class VsomeipTransport(UTransport, RpcClient):
 
         payload = message.payload
         if message.payload.value != payload_data:
-            # todo: this is failing, fixme???
             hint = UPayloadFormat.UPAYLOAD_FORMAT_UNSPECIFIED
             payload = UPayload(value=payload_data, hint=hint)
 
@@ -280,8 +273,7 @@ class VsomeipTransport(UTransport, RpcClient):
             payload=payload,
             attributes=message.attributes
         )
-        # id - unique ID
-        # reqid - the one received from received message , set it to new message and send
+
         service_id = parsed_message.attributes.sink.entity.id
         method_id = parsed_message.attributes.sink.resource.id
         _, listener = self._registers[service_id][method_id]
@@ -290,7 +282,7 @@ class VsomeipTransport(UTransport, RpcClient):
 
         return None
 
-    def _for_response_handler(self, message_type: int, service_id: int, method_id: int, _: bytearray, request_id: int) -> bytearray:
+    def _for_response_handler(self, message_type: int, service_id: int, method_id: int, _: bytearray, __: int) -> bytearray:
         """
         Return from the send response set for the response of the initial request message
         """
@@ -300,8 +292,8 @@ class VsomeipTransport(UTransport, RpcClient):
 
         response_data = None
 
-        timed_out = 100
-        while True:  # todo: with locks instead, guessing on a timeout for now
+        timed_out = 40  # ~ 1sec.
+        while True:  # todo: with locks instead
             timed_out = timed_out - 1
             if timed_out < 0:
                 break

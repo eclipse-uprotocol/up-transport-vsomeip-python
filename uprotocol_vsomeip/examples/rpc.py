@@ -23,6 +23,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # -------------------------------------------------------------------------
+import logging
 import time
 from typing import List
 
@@ -42,6 +43,8 @@ from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from target.protofiles.ultifi.vehicle.chassis.braking.v1 import braking_service_pb2
 
+log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
+logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
 
 class Helper(VsomeipHelper):
 
@@ -60,6 +63,7 @@ class RPCRequestListener(UListener):
                                                           UPriority.UPRIORITY_CS4,
                                                           Factories.UPROTOCOL.create()).build()
         message = UMessage(attributes=attributes_response, payload=umsg.payload)
+        print(umsg.payload)
         someip.send(message)
 
 

@@ -23,6 +23,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # -------------------------------------------------------------------------
+import logging
 import time
 import socket
 from typing import List
@@ -41,6 +42,9 @@ from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 from target.protofiles.ultifi.vehicle.body.cabin_climate.v1 import climate_control_topics_pb2
 
+
+log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
+logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
 
 class Helper(VsomeipHelper):
 
