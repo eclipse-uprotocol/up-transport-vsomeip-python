@@ -87,7 +87,7 @@ def subscribe():
 
 
 if __name__ == '__main__':
-    publish()
-    time.sleep(1)
     subscribe()
     time.sleep(1)
+    publish()
+    time.sleep(5)
