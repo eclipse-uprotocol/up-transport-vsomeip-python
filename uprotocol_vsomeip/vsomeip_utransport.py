@@ -229,7 +229,7 @@ class VsomeipTransport(UTransport, RpcClient):
         logger.debug(f"{parsed_message}")
 
         if not self._futures[uuid].done():
-            self._futures[uuid].set_result(parsed_message)
+            self._futures[uuid].set_result(parsed_message.payload.value)
         else:
             print("Future result state is already finished or cancelled")
 
