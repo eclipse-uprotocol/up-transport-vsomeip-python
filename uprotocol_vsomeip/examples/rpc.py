@@ -58,12 +58,9 @@ someip = VsomeipTransport(helper=Helper())
 class RPCRequestListener(UListener):
     def on_receive(self, umsg: UMessage):
         print('on rpc request received')
-        attributes_response = UAttributesBuilder.response(umsg.attributes.sink,
-                                                          umsg.attributes.source,
-                                                          UPriority.UPRIORITY_CS4,
-                                                          Factories.UPROTOCOL.create()).build()
+
+        attributes_response = UAttributesBuilder.response(umsg.attributes).build()
         message = UMessage(attributes=attributes_response, payload=umsg.payload)
-        print(umsg.payload)
         someip.send(message)
 
 
@@ -97,6 +94,5 @@ def client():
 
 if __name__ == '__main__':
     service()
-    time.sleep(1)
+    time.sleep(3)
     client()
-    time.sleep(1)

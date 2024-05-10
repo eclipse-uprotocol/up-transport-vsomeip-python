@@ -211,12 +211,13 @@ class VsomeipTransport(UTransport, RpcClient):
         if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
             return
 
-        uuid = LongUuidSerializer.instance().serialize(self._requests[request_id].attributes.id)
+        id = LongUuidSerializer.instance().serialize(self._requests[request_id].attributes.id)
+        print(id)
 
         payload = UPayload()
         payload.value = bytes(data)
         logger.debug(f"{payload}")
-
+        '''
         attributes = UAttributes()
         #attributes.reqid = uuid
         logger.debug(f"{attributes}")
@@ -225,15 +226,24 @@ class VsomeipTransport(UTransport, RpcClient):
             payload=payload,
             attributes=attributes
         )
+        '''
+        # attributes = UAttributes()
+        # #attributes.reqid = uuid
+        # logger.debug(f"{attributes}")
+
+        parsed_message = UMessage(
+            payload=UPayload(value=bytes(data), format=UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY),
+            attributes=self._requests[request_id].attributes
+        )
 
         logger.debug(f"{parsed_message}")
 
-        if not self._futures[uuid].done():
-            self._futures[uuid].set_result(parsed_message.payload.value)
+        if not self._futures[id].done():
+            self._futures[id].set_result(parsed_message.payload.value)
         else:
             print("Future result state is already finished or cancelled")
 
-    def _on_event_handler(self, message_type: int, service_id: int, event_id: int, data: bytearray, _: int) -> bytearray:
+    def _on_event_handler(self, message_type: int, service_id: int, event_id: int, data: bytearray, request_id: int) -> bytearray:
         """
         handle responses from service with callback to listener registered
         """
@@ -258,11 +268,14 @@ class VsomeipTransport(UTransport, RpcClient):
         if listener:
             listener.on_receive(parsed_message)  # call actual callback now...
 
-    def _on_rpc_method_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
+    def _test(self, message_type: int, service_id: int, method_id: int, data: bytearray,
+                               request_id: int):
+        return data
+
+    def _on_rpc_method_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int):
         """
         handle responses from service with callback to listener registered
         """
-
         if message_type != vsomeip.SOMEIP.Message_Type.REQUEST.value:
             return
 
@@ -287,7 +300,7 @@ class VsomeipTransport(UTransport, RpcClient):
 
         return None
 
-    def _for_response_handler(self, message_type: int, service_id: int, method_id: int, _: bytearray, __: int) -> bytearray:
+    def _for_response_handler(self, message_type: int, _: int, __: int, ___: bytearray, request_id: int):
         """
         Return from the send response set for the response of the initial request message
         """
@@ -296,26 +309,23 @@ class VsomeipTransport(UTransport, RpcClient):
 
         response_data = None
 
+        message = self._requests[request_id]  # Note: is mem shared copy, CHEATER!!!
+        id = LongUuidSerializer.instance().serialize(message.attributes.id)
+
         timed_out = 120  # ~ 3sec.
         while True:  # todo: with locks instead
             timed_out = timed_out - 1
             if timed_out < 0:
                 break
-            time.sleep(0.025)
-
-            if service_id not in self._responses:
+            if id not in self._responses:  # id == reqid of uTransport
+                time.sleep(0.025)
                 continue
-            if method_id not in self._responses[service_id]:
-                continue
-            if not self._responses[service_id][method_id]:  # empty
-                continue
-
-            response_data = self._responses[service_id][method_id][0]
-            del self._responses[service_id][method_id][0]
+            response_data = self._responses[id][0].payload.value
+            del self._responses[id][0]
             break
 
         logger.debug(f"_for_response_handler, responses {response_data}")
-        return response_data  # note:  return data is what is sent over transport (i.e. someip) as response
+        return bytearray(response_data)  # note:  return data is what is sent over transport (i.e. someip) as response
 
     def send(self, message: UMessage) -> UStatus:
         """
@@ -352,7 +362,7 @@ class VsomeipTransport(UTransport, RpcClient):
             payload_data = bytearray(message.payload.value)
             try:
                 request_id = instance.request(id=id_method, data=payload_data)
-                logger.debug(f"request_id {request_id}")
+                print(f"request_id {request_id}")
                 self._requests[request_id] = message  # Important: in memory ONLY, thus stored per application level, not information based in payload
             except Exception as ex:
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)
@@ -364,17 +374,14 @@ class VsomeipTransport(UTransport, RpcClient):
             if status.is_failure():
                 return status.to_status()
 
-            instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
-            id_service = instance._id
-            id_message = uri.resource.id
+            #instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
             payload_data = bytearray(message.payload.value)
             logger.debug(payload_data)
+            req_id = LongUuidSerializer.instance().serialize(message.attributes.reqid)
             try:
-                if id_service not in self._responses:
-                    self._responses[id_service] = {}
-                if id_message not in self._responses[id_service]:
-                    self._responses[id_service][id_message] = []
-                self._responses[id_service][id_message].append(payload_data)
+                if req_id not in self._responses:
+                    self._responses[req_id] = []
+                self._responses[req_id].append(message)
             except NotImplementedError as ex:
                 raise ex
             except Exception as ex:
