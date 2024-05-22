@@ -24,6 +24,7 @@
 UP CLIENT VSOMEIP PYTHON
 """
 import json
+import logging
 import os
 import socket
 import sys
@@ -34,25 +35,19 @@ from concurrent.futures import Future
 from enum import Enum
 from typing import Tuple, Final
 
-from google.protobuf import any_pb2
 from someip_adapter import vsomeip
-from uprotocol.cloudevent.serialize.base64protobufserializer import Base64ProtobufSerializer
-from uprotocol.proto.uattributes_pb2 import UMessageType, UPriority, UAttributes
+from uprotocol.proto.uattributes_pb2 import CallOptions
+from uprotocol.proto.uattributes_pb2 import UMessageType, UPriority
 from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload
 from uprotocol.proto.upayload_pb2 import UPayloadFormat
 from uprotocol.proto.uri_pb2 import UEntity, UUri
 from uprotocol.proto.ustatus_pb2 import UStatus, UCode
-from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.rpc.rpcclient import RpcClient
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
 from uprotocol.transport.utransport import UTransport
-from uprotocol.uri.factory.uresource_builder import UResourceBuilder
 from uprotocol.uri.validator.urivalidator import UriValidator
-import logging
-
-from uprotocol.uuid.factory.uuidfactory import Factories
 from uprotocol.uuid.serializer.longuuidserializer import LongUuidSerializer
 
 from .helper import VsomeipHelper
@@ -71,6 +66,7 @@ class VsomeipTransport(UTransport, RpcClient):
     _instances = {}
     _configuration = {}
     _requests = {}
+    _published = {}
     _lock = threading.Lock()
 
     EVENT_MASK: Final = 0x8000
@@ -207,72 +203,46 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         callback for RPC method to set Future
         """
-        logger.debug(f"_invoke_handler")
         if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
             return
 
         id = LongUuidSerializer.instance().serialize(self._requests[request_id].attributes.id)
-        print(id)
-
-        payload = UPayload()
-        payload.value = bytes(data)
-        logger.debug(f"{payload}")
-        '''
-        attributes = UAttributes()
-        #attributes.reqid = uuid
-        logger.debug(f"{attributes}")
-
-        parsed_message = UMessage(
-            payload=payload,
-            attributes=attributes
-        )
-        '''
-        # attributes = UAttributes()
-        # #attributes.reqid = uuid
-        # logger.debug(f"{attributes}")
-
         parsed_message = UMessage(
             payload=UPayload(value=bytes(data), format=UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY),
             attributes=self._requests[request_id].attributes
         )
 
-        logger.debug(f"{parsed_message}")
-
         if not self._futures[id].done():
-            self._futures[id].set_result(parsed_message.payload.value)
+            self._futures[id].set_result(parsed_message)
         else:
-            print("Future result state is already finished or cancelled")
+            logger.info("Future result state is already finished or cancelled")
 
-    def _on_event_handler(self, message_type: int, service_id: int, event_id: int, data: bytearray, request_id: int) -> bytearray:
+    def _on_event_handler(self, message_type: int, service_id: int, event_id: int, data: bytearray, _: int) -> bytearray:
         """
         handle responses from service with callback to listener registered
         """
         # not want to hear from self!!!
         if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
-            return None
+            return
 
-        payload = UPayload()
-        payload.value = bytes(data)
-        logger.debug(f"{payload}")
+        payload_data = bytes(data)
+        message = self._published[service_id][event_id]  # Note: is mem shared copy
 
-        attributes = UAttributes()
-        logger.debug(f"{attributes}")
+        payload = message.payload
+        if message.payload.value != payload_data:
+            hint = UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY
+            payload = UPayload(value=payload_data, hint=hint)
 
         parsed_message = UMessage(
             payload=payload,
-            attributes=attributes
+            attributes=message.attributes
         )
 
-        _, listener = self._registers[service_id][event_id]
+        for _, listener in self._registers[service_id][event_id]:
+            if listener:
+                listener.on_receive(parsed_message)  # call actual callback now...
 
-        if listener:
-            listener.on_receive(parsed_message)  # call actual callback now...
-
-    def _test(self, message_type: int, service_id: int, method_id: int, data: bytearray,
-                               request_id: int):
-        return data
-
-    def _on_rpc_method_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int):
+    def _on_rpc_method_handler(self, message_type: int, service_id: int, method_id: int, data: bytearray, request_id: int):
         """
         handle responses from service with callback to listener registered
         """
@@ -284,7 +254,7 @@ class VsomeipTransport(UTransport, RpcClient):
 
         payload = message.payload
         if message.payload.value != payload_data:
-            hint = UPayloadFormat.UPAYLOAD_FORMAT_UNSPECIFIED
+            hint = UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY
             payload = UPayload(value=payload_data, hint=hint)
 
         parsed_message = UMessage(
@@ -292,11 +262,9 @@ class VsomeipTransport(UTransport, RpcClient):
             attributes=message.attributes
         )
 
-        service_id = parsed_message.attributes.sink.entity.id
-        method_id = parsed_message.attributes.sink.resource.id
-        _, listener = self._registers[service_id][method_id]
-        if listener:
-            listener.on_receive(parsed_message)  # call actual callback now...
+        for _, listener in self._registers[service_id][method_id]:
+            if listener:
+                listener.on_receive(parsed_message)  # call actual callback now...
 
         return None
 
@@ -324,7 +292,6 @@ class VsomeipTransport(UTransport, RpcClient):
             del self._responses[id][0]
             break
 
-        logger.debug(f"_for_response_handler, responses {response_data}")
         return bytearray(response_data)  # note:  return data is what is sent over transport (i.e. someip) as response
 
     def send(self, message: UMessage) -> UStatus:
@@ -335,6 +302,7 @@ class VsomeipTransport(UTransport, RpcClient):
         :return: UStatus with UCode set to the status code (successful or failure).
         """
         if message.attributes.type == UMessageType.UMESSAGE_TYPE_PUBLISH:
+            logger.debug("SEND PUBLISH")
             uri = message.attributes.source
             status = UriValidator.validate(uri)
             if status.is_failure():
@@ -342,10 +310,14 @@ class VsomeipTransport(UTransport, RpcClient):
             instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
 
             id_event = self.EVENT_MASK + uri.resource.id
+            service_id = uri.entity.id
             payload_data = bytearray(message.payload.value)
             try:
                 instance.offer(events=[id_event])
                 if payload_data:
+                    if service_id not in self._published:
+                        self._published[service_id] = {}
+                    self._published[service_id][id_event] = message
                     instance.notify(id=id_event, data=payload_data)
             except Exception as ex:
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)
@@ -362,7 +334,6 @@ class VsomeipTransport(UTransport, RpcClient):
             payload_data = bytearray(message.payload.value)
             try:
                 request_id = instance.request(id=id_method, data=payload_data)
-                print(f"request_id {request_id}")
                 self._requests[request_id] = message  # Important: in memory ONLY, thus stored per application level, not information based in payload
             except Exception as ex:
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)
@@ -376,7 +347,6 @@ class VsomeipTransport(UTransport, RpcClient):
 
             #instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
             payload_data = bytearray(message.payload.value)
-            logger.debug(payload_data)
             req_id = LongUuidSerializer.instance().serialize(message.attributes.reqid)
             try:
                 if req_id not in self._responses:
@@ -408,7 +378,9 @@ class VsomeipTransport(UTransport, RpcClient):
 
         if service_id not in self._registers:
             self._registers[service_id] = {}
-        self._registers[service_id][resource_id] = (uri, listener)
+        if resource_id not in self._registers[service_id]:
+            self._registers[service_id][resource_id] = []
+        self._registers[service_id][resource_id].append((uri, listener))
 
         try:
             if is_method:

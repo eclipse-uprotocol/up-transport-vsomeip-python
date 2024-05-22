@@ -28,7 +28,6 @@ import time
 from typing import List
 
 from google.protobuf import any_pb2
-from uprotocol.proto.uattributes_pb2 import UPriority
 from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload
 from uprotocol.proto.upayload_pb2 import UPayloadFormat
@@ -38,13 +37,13 @@ from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
 from uprotocol.uri.factory.uresource_builder import UResourceBuilder
-from uprotocol.uuid.factory.uuidfactory import Factories
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
 from target.protofiles.ultifi.vehicle.chassis.braking.v1 import braking_service_pb2
 
 log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
 logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
+
 
 class Helper(VsomeipHelper):
 
@@ -79,7 +78,6 @@ def client():
     reset_request = braking_service_pb2.ResetHealthRequest(name="brake_pads.front")
     any_obj.Pack(reset_request)
     payload_data = any_obj.SerializeToString()
-    print(payload_data)
     payload = UPayload(value=payload_data, format=hint)
     u_entity = UEntity(name='chassis.braking', id=17, version_major=1, version_minor=0)
     u_resource = UResourceBuilder.for_rpc_request("ResetHealth", id=1)
