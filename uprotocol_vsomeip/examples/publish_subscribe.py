@@ -77,18 +77,30 @@ class myListener(UListener):
     def on_receive(self, message: UMessage):
         logger.debug(f"listener -> id: {message.attributes.source.resource.id}, data: {message.payload.value}")
 
+listener = myListener()
 
 def subscribe():
     u_authority = UAuthority(name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname())))
     u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
     u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
     uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
-    listener = myListener()
     someip.register_listener(uri, listener)
+
+
+def unsubscribe():
+    u_authority = UAuthority(name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname())))
+    u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
+    u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
+    uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
+    someip.unregister_listener(uri, listener)
 
 
 if __name__ == '__main__':
     subscribe()
+    time.sleep(1)
+    publish()
+    time.sleep(5)
+    unsubscribe()
     time.sleep(1)
     publish()
     time.sleep(5)
