@@ -69,7 +69,6 @@ class VsomeipTransport(UTransport, RpcClient):
     _published = {}
     _lock = threading.Lock()
 
-    EVENT_MASK: Final = 0x8000
     INSTANCE_ID: Final = 0x0000
     MINOR_VERSION: Final = 0x0000
 
@@ -160,7 +159,7 @@ class VsomeipTransport(UTransport, RpcClient):
                 service["instance"].offer()
                 service["instance"].start()
 
-                service["instance"].offer(events=[self.EVENT_MASK+event_id for event_id in service["events"]])
+                service["instance"].offer(events=[event_id for event_id in service["events"]])
 
     def _get_instance(self, entity: UEntity,
                       entity_type: VSOMEIPType) -> vsomeip.SOMEIP:
@@ -307,7 +306,7 @@ class VsomeipTransport(UTransport, RpcClient):
                 return status.to_status()
             instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
 
-            event_id = self.EVENT_MASK + uri.resource.id
+            event_id = uri.resource.id
             service_id = uri.entity.id
             payload_data = bytearray(message.payload.value)
             try:
@@ -368,8 +367,6 @@ class VsomeipTransport(UTransport, RpcClient):
         is_method = UriValidator.validate_rpc_method(uri).is_success()
         resource_id = uri.resource.id
         service_id = uri.entity.id
-        if not is_method:  # if not method, then must be event!
-            resource_id = self.EVENT_MASK + resource_id  # event/method id
 
         if service_id not in self._registers:
             self._registers[service_id] = {}
@@ -403,7 +400,7 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         instance = self._get_instance(topic.entity, VsomeipTransport.VSOMEIPType.SERVICE)
         service_id = topic.entity.id
-        event_id = self.EVENT_MASK + topic.resource.id
+        event_id = topic.resource.id
         try:
             instance.remove(event_id)
             if service_id in self._registers:

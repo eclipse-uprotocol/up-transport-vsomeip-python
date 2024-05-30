@@ -34,7 +34,7 @@ REQUIREMENTS = [i.strip() for i in open(os.path.join("requirements.txt")).readli
 
 setup(
     name=project_name,
-    version='0.1',
+    version='0.1.1',
     python_requires='>=3.8',
     description='',
     author='',
