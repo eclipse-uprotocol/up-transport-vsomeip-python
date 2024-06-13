@@ -1,2 +1,2 @@
 up-python==0.1.2.dev0
-someip_adapter @ git+https://github.com/justinlhudson/someip_adapter.git@a3880f2
+vsomeip_py @git+https://github.com/COVESA/vsomeip_py.git@16f3e4c

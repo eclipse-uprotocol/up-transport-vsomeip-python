@@ -36,7 +36,7 @@ from concurrent.futures import Future
 from enum import Enum
 from typing import Tuple, Final
 
-from someip_adapter import vsomeip
+from vsomeip_py import vsomeip
 from uprotocol.proto.uattributes_pb2 import CallOptions, UMessageType, UPriority
 from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload, UPayloadFormat
@@ -157,7 +157,7 @@ class VsomeipTransport(UTransport, RpcClient):
                         }
                     )
 
-                    instance = vsomeip.SOMEIP(
+                    instance = vsomeip.vSOMEIP(
                         name=service_name,
                         id=service_id,
                         instance=self.INSTANCE_ID,
@@ -181,7 +181,7 @@ class VsomeipTransport(UTransport, RpcClient):
 
     def _get_instance(
         self, entity: UEntity, entity_type: VSOMEIPType
-    ) -> vsomeip.SOMEIP:
+    ) -> vsomeip.vSOMEIP:
         """
         configure and create instances of vsomeip
 
@@ -204,7 +204,7 @@ class VsomeipTransport(UTransport, RpcClient):
                         "service": str(entity_id),
                     }
                 )
-                instance = vsomeip.SOMEIP(
+                instance = vsomeip.vSOMEIP(
                     name=entity_name,
                     id=entity_id,
                     instance=self.INSTANCE_ID,
@@ -225,7 +225,7 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         callback for RPC method to set Future
         """
-        if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
+        if message_type == vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return
 
         id = LongUuidSerializer.instance().serialize(
@@ -251,7 +251,7 @@ class VsomeipTransport(UTransport, RpcClient):
         handle responses from service with callback to listener registered
         """
         # not want to hear from self!!!
-        if message_type == vsomeip.SOMEIP.Message_Type.REQUEST.value:
+        if message_type == vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return None
 
         payload_data = bytes(data)
@@ -282,7 +282,7 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         handle responses from service with callback to listener registered
         """
-        if message_type != vsomeip.SOMEIP.Message_Type.REQUEST.value:
+        if message_type != vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return None
 
         payload_data = bytes(data)
@@ -309,7 +309,7 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         Return from the send response set for the response of the initial request message
         """
-        if message_type != vsomeip.SOMEIP.Message_Type.REQUEST.value:
+        if message_type != vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return None  # do nothing
 
         response_data = None
