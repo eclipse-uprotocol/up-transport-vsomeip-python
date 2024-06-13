@@ -18,3 +18,4 @@ vsomeip.json
 temporary_wheels/
 target/
 venv/
+.ruff_cache/

@@ -6,11 +6,11 @@ class VsomeipHelper:
     """
     Vsomeip Helper class
     """
+
     @dataclass
     class UEntityInfo:
-        """
+        """ """
 
-        """
         Name: str
         Id: int
         Events: List[int]

@@ -23,79 +23,126 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # -------------------------------------------------------------------------
+"""
+Publish Subscribe Example
+"""
 import logging
 import time
 import socket
 from typing import List
 
-from uprotocol.transport.ulistener import UListener
-from uprotocol.proto.uri_pb2 import UUri
-from uprotocol.proto.uri_pb2 import UAuthority
-from uprotocol.proto.uri_pb2 import UEntity
-from uprotocol.proto.uri_pb2 import UResource
-from uprotocol.proto.umessage_pb2 import UMessage
 from google.protobuf import any_pb2
-from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
+from uprotocol.transport.ulistener import UListener
+from uprotocol.proto.uri_pb2 import UUri, UAuthority, UEntity, UResource
+from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayloadFormat, UPayload
-from uprotocol.proto.uattributes_pb2 import UAttributes, UMessageType, UPriority
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
-from target.protofiles.ultifi.vehicle.body.cabin_climate.v1 import climate_control_topics_pb2
+from uprotocol.proto.uattributes_pb2 import UPriority
+from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
+from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport, VsomeipHelper
+from target.protofiles.ultifi.vehicle.body.cabin_climate.v1 import (
+    climate_control_topics_pb2,
+)
 
 logger = logging.getLogger()
-log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
-logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
+LOG_FORMAT = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
+logging.basicConfig(format=LOG_FORMAT, level=logging.getLevelName("DEBUG"))
 
 
 class Helper(VsomeipHelper):
-
+    """
+    Helper class to provide list of services to be offered
+    """
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
-        return [VsomeipHelper.UEntityInfo(Name="body.cabin_climate", Id=5, Events=[0, 1, 2, 3, 4, 5, 6, 7, 8, 10], Port=30509, MajorVersion=1)]
+        return [
+            VsomeipHelper.UEntityInfo(
+                Name="body.cabin_climate",
+                Id=5,
+                Events=[0, 1, 2, 3, 4, 5, 6, 7, 8, 10],
+                Port=30509,
+                MajorVersion=1,
+            )
+        ]
 
 
 someip = VsomeipTransport(helper=Helper())
 
 
 def publish():
+    """
+    Publish data to a topic
+    """
     protoobj = climate_control_topics_pb2.Zone()
     protoobj.power_on = True
     protoobj.blower_level = 3
     any_obj = any_pb2.Any()
     any_obj.Pack(protoobj)
     payload_data = any_obj.SerializeToString()
-    payload = UPayload(value=payload_data, format=UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF)
+    payload = UPayload(
+        value=payload_data, format=UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF
+    )
 
-    u_authority = UAuthority(name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname())))
-    u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
+    u_authority = UAuthority(
+        name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname()))
+    )
+    u_entity = UEntity(
+        name="body.cabin_climate", id=5, version_major=1, version_minor=1
+    )
     u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
     uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
     attributes = UAttributesBuilder.publish(uri, UPriority.UPRIORITY_CS0).build()
     someip.send(UMessage(attributes=attributes, payload=payload))
 
 
-class myListener(UListener):
+class MyListener(UListener):
+    """
+    Listener class to define callback
+    """
     def on_receive(self, message: UMessage):
-        logger.debug(f"listener -> id: {message.attributes.source.resource.id}, data: {message.payload.value}")
+        """
+        on_receive call back method
+        :param message: UMessage object received
+        :return: None
+        """
+        logger.debug(
+            "listener -> id: %s, data: %s",
+            message.attributes.source.resource.id, message.payload.value
+        )
 
-listener = myListener()
+
+listener = MyListener()
+
 
 def subscribe():
-    u_authority = UAuthority(name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname())))
-    u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
+    """
+    Subscribe to a topic
+    """
+    u_authority = UAuthority(
+        name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname()))
+    )
+    u_entity = UEntity(
+        name="body.cabin_climate", id=5, version_major=1, version_minor=1
+    )
     u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
     uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
     someip.register_listener(uri, listener)
 
 
 def unsubscribe():
-    u_authority = UAuthority(name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname())))
-    u_entity = UEntity(name='body.cabin_climate', id=5, version_major=1, version_minor=1)
+    """
+    Unsubscribe to a topic
+    """
+    u_authority = UAuthority(
+        name="myremote", ip=socket.inet_aton(socket.gethostbyname(socket.gethostname()))
+    )
+    u_entity = UEntity(
+        name="body.cabin_climate", id=5, version_major=1, version_minor=1
+    )
     u_resource = UResource(name="zone", instance="row1_left", message="Zone", id=3)
     uri = UUri(authority=u_authority, entity=u_entity, resource=u_resource)
     someip.unregister_listener(uri, listener)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     subscribe()
     time.sleep(1)
     publish()

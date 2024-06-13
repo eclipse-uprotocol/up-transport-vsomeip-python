@@ -23,40 +23,58 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # -------------------------------------------------------------------------
+"""
+RPC Example
+"""
 import logging
 import time
 from typing import List
 
 from google.protobuf import any_pb2
 from uprotocol.proto.umessage_pb2 import UMessage
-from uprotocol.proto.upayload_pb2 import UPayload
-from uprotocol.proto.upayload_pb2 import UPayloadFormat
-from uprotocol.proto.uri_pb2 import UEntity
-from uprotocol.proto.uri_pb2 import UUri
+from uprotocol.proto.upayload_pb2 import UPayload, UPayloadFormat
+from uprotocol.proto.uri_pb2 import UEntity, UUri
 from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
 from uprotocol.uri.factory.uresource_builder import UResourceBuilder
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
+from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper, VsomeipTransport
 from target.protofiles.ultifi.vehicle.chassis.braking.v1 import braking_service_pb2
 
-log_format = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
-logging.basicConfig(format=log_format, level=logging.getLevelName('DEBUG'))
+LOG_FORMAT = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
+logging.basicConfig(format=LOG_FORMAT, level=logging.getLevelName("DEBUG"))
 
 
 class Helper(VsomeipHelper):
-
+    """
+    Helper class to provide list of services to be offered
+    """
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
-        return [VsomeipHelper.UEntityInfo(Name="chassis.braking", Id=17, Events=[0, 10, 11], Port=30511, MajorVersion=1)]
+        return [
+            VsomeipHelper.UEntityInfo(
+                Name="chassis.braking",
+                Id=17,
+                Events=[0, 10, 11],
+                Port=30511,
+                MajorVersion=1,
+            )
+        ]
 
 
 someip = VsomeipTransport(helper=Helper())
 
 
 class RPCRequestListener(UListener):
+    """
+    Listener class to define callback
+    """
     def on_receive(self, umsg: UMessage):
-        print('on rpc request received')
+        """
+        on_receive call back method
+        :param umsg: UMessage object received
+        :return: None
+        """
+        print("on rpc request received")
 
         attributes_response = UAttributesBuilder.response(umsg.attributes).build()
         message = UMessage(attributes=attributes_response, payload=umsg.payload)
@@ -64,7 +82,10 @@ class RPCRequestListener(UListener):
 
 
 def service():
-    u_entity = UEntity(name='chassis.braking', id=17, version_major=1, version_minor=0)
+    """
+    Register an RPC Method to a Service
+    """
+    u_entity = UEntity(name="chassis.braking", id=17, version_major=1, version_minor=0)
     u_resource = UResourceBuilder.for_rpc_request("ResetHealth", id=1)
 
     sink = UUri(entity=u_entity, resource=u_resource)
@@ -73,13 +94,16 @@ def service():
 
 
 def client():
+    """
+    Client requesting for an RPC method
+    """
     hint = UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF
     any_obj = any_pb2.Any()
     reset_request = braking_service_pb2.ResetHealthRequest(name="brake_pads.front")
     any_obj.Pack(reset_request)
     payload_data = any_obj.SerializeToString()
     payload = UPayload(value=payload_data, format=hint)
-    u_entity = UEntity(name='chassis.braking', id=17, version_major=1, version_minor=0)
+    u_entity = UEntity(name="chassis.braking", id=17, version_major=1, version_minor=0)
     u_resource = UResourceBuilder.for_rpc_request("ResetHealth", id=1)
     method_uri = UUri(entity=u_entity, resource=u_resource)
     res_future = someip.invoke_method(method_uri, payload, CallOptions(ttl=15000))
@@ -90,7 +114,7 @@ def client():
     print("FUTURE RESULT", res_future.result())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     service()
     time.sleep(3)
     client()
