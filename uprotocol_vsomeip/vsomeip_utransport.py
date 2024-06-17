@@ -1,29 +1,16 @@
-# -------------------------------------------------------------------------
-
-# Copyright (c) 2024 General Motors GTO LLC
-
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-
-#    http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-
-# -------------------------------------------------------------------------
 """
-UP CLIENT VSOMEIP PYTHON
-"""
+SPDX-FileCopyrightText: 2024 Contributors to the Eclipse Foundation
 
+See the NOTICE file(s) distributed with this work for additional
+information regarding copyright ownership.
+
+This program and the accompanying materials are made available under the
+terms of the Apache License Version 2.0 which is available at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+SPDX-License-Identifier: Apache-2.0
+"""
 import json
 import logging
 import os
@@ -91,7 +78,6 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         super().__init__()
         self._multicast = multicast
-
         self._helper = helper
         self._source = source
 
@@ -112,13 +98,13 @@ class VsomeipTransport(UTransport, RpcClient):
             self._create_services()
 
     @staticmethod
-    def _replace_special_chars(string):
+    def _replace_special_chars(string: str) -> str:
         """
         Replace . with _ to name the vsomeip application
         """
         return string.replace(".", "_")
 
-    def _create_services(self):
+    def _create_services(self) -> None:
         """
         Instantiate all COVESA Services
         """
@@ -175,9 +161,7 @@ class VsomeipTransport(UTransport, RpcClient):
                 service["instance"].offer()
                 service["instance"].start()
 
-                service["instance"].offer(
-                    events=service["events"]
-                )
+                service["instance"].offer(events=service["events"])
 
     def _get_instance(
         self, entity: UEntity, entity_type: VSOMEIPType
@@ -228,7 +212,7 @@ class VsomeipTransport(UTransport, RpcClient):
         if message_type == vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return
 
-        id = LongUuidSerializer.instance().serialize(
+        req_id = LongUuidSerializer.instance().serialize(
             self._requests[request_id].attributes.id
         )
         parsed_message = UMessage(
@@ -239,8 +223,8 @@ class VsomeipTransport(UTransport, RpcClient):
             attributes=self._requests[request_id].attributes,
         )
 
-        if not self._futures[id].done():
-            self._futures[id].set_result(parsed_message)
+        if not self._futures[req_id].done():
+            self._futures[req_id].set_result(parsed_message)
         else:
             _logger.info("Future result state is already finished or cancelled")
 
@@ -250,7 +234,6 @@ class VsomeipTransport(UTransport, RpcClient):
         """
         handle responses from service with callback to listener registered
         """
-        # not want to hear from self!!!
         if message_type == vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return None
 
@@ -315,18 +298,18 @@ class VsomeipTransport(UTransport, RpcClient):
         response_data = None
 
         message = self._requests[request_id]  # Note: is mem shared copy, CHEATER!!!
-        id = LongUuidSerializer.instance().serialize(message.attributes.id)
+        req_id = LongUuidSerializer.instance().serialize(message.attributes.id)
 
         timed_out = 120  # ~ 3sec.
         while True:  # todo: with locks instead
             timed_out = timed_out - 1
             if timed_out < 0:
                 break
-            if id not in self._responses:
+            if req_id not in self._responses:
                 time.sleep(0.025)
                 continue
-            response_data = self._responses[id][0].payload.value
-            del self._responses[id][0]
+            response_data = self._responses[req_id][0].payload.value
+            del self._responses[req_id][0]
             break
 
         return bytearray(
@@ -378,7 +361,7 @@ class VsomeipTransport(UTransport, RpcClient):
             try:
                 request_id = instance.request(id=method_id, data=payload_data)
                 self._requests[request_id] = (
-                    message  # Important: in memory ONLY, thus stored per # application level, not information based in payload
+                    message  # Important: in memory ONLY, thus stored per application level
                 )
             except Exception as ex:
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)

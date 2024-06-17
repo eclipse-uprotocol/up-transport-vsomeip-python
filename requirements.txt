@@ -1,2 +1,2 @@
-up-python==0.1.2.dev0
+up-python==0.1.2-dev
 vsomeip_py @git+https://github.com/COVESA/vsomeip_py.git@16f3e4c
