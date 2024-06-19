@@ -70,6 +70,7 @@ class VsomeipTransport(UTransport, RpcClient):
     def __init__(
         self,
         source: UUri = UUri(),
+        unicast: str = "127.0.0.1",
         multicast: Tuple[str, int] = ("224.244.224.245", 30490),
         helper: VsomeipHelper = VsomeipHelper(),
     ):
@@ -77,6 +78,7 @@ class VsomeipTransport(UTransport, RpcClient):
         init
         """
         super().__init__()
+        self._unicast = unicast
         self._multicast = multicast
         self._helper = helper
         self._source = source
@@ -111,12 +113,12 @@ class VsomeipTransport(UTransport, RpcClient):
         services = self._helper.services_info()
 
         service_instances = {}
-        ip_addr = "127.0.0.1"  # todo?: ipaddress.IPv4Address(uri.authority.ip)
-        if IS_WINDOWS:  # note: vsomeip needs actual address not localhost
-            ip_addr = str(socket.gethostbyname(socket.gethostname()))
+
+        if IS_WINDOWS and self._unicast == "127.0.0.1":  # note: vsomeip needs actual address not localhost
+            self._unicast = str(socket.gethostbyname(socket.gethostname()))
 
         with self._lock:
-            self._configuration["unicast"] = str(ip_addr)
+            self._configuration["unicast"] = self._unicast
             self._configuration["service-discovery"]["multicast"] = str(
                 self._multicast[0]
             )
