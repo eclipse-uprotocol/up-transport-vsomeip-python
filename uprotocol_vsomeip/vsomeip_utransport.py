@@ -11,6 +11,7 @@ terms of the Apache License Version 2.0 which is available at
 
 SPDX-License-Identifier: Apache-2.0
 """
+
 import json
 import logging
 import os
@@ -21,20 +22,20 @@ import time
 from builtins import str
 from concurrent.futures import Future
 from enum import Enum
-from typing import Tuple, Final
+from typing import Final, Tuple
 
-from vsomeip_py import vsomeip
 from uprotocol.proto.uattributes_pb2 import CallOptions, UMessageType, UPriority
 from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload, UPayloadFormat
 from uprotocol.proto.uri_pb2 import UEntity, UUri
-from uprotocol.proto.ustatus_pb2 import UStatus, UCode
+from uprotocol.proto.ustatus_pb2 import UCode, UStatus
 from uprotocol.rpc.rpcclient import RpcClient
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
 from uprotocol.transport.utransport import UTransport
 from uprotocol.uri.validator.urivalidator import UriValidator
 from uprotocol.uuid.serializer.longuuidserializer import LongUuidSerializer
+from vsomeip_py import vsomeip
 
 from .helper import VsomeipHelper
 
@@ -119,18 +120,14 @@ class VsomeipTransport(UTransport, RpcClient):
 
         with self._lock:
             self._configuration["unicast"] = self._unicast
-            self._configuration["service-discovery"]["multicast"] = str(
-                self._multicast[0]
-            )
+            self._configuration["service-discovery"]["multicast"] = str(self._multicast[0])
             self._configuration["service-discovery"]["port"] = str(self._multicast[1])
 
             for service in services:
                 service_name = service.Name
                 service_id = service.Id
                 service_name = (
-                    self._replace_special_chars(service_name)
-                    + "_"
-                    + VsomeipTransport.VSOMEIPType.SERVICE.value
+                    self._replace_special_chars(service_name) + "_" + VsomeipTransport.VSOMEIPType.SERVICE.value
                 )
                 if service_name not in self._instances:
                     self._configuration["applications"].append(
@@ -165,9 +162,7 @@ class VsomeipTransport(UTransport, RpcClient):
 
                 service["instance"].offer(events=service["events"])
 
-    def _get_instance(
-        self, entity: UEntity, entity_type: VSOMEIPType
-    ) -> vsomeip.vSOMEIP:
+    def _get_instance(self, entity: UEntity, entity_type: VSOMEIPType) -> vsomeip.vSOMEIP:
         """
         configure and create instances of vsomeip
 
@@ -177,13 +172,8 @@ class VsomeipTransport(UTransport, RpcClient):
         entity_id = entity.id
         entity_name = self._replace_special_chars(entity.name) + "_" + entity_type.value
         with self._lock:
-            if (
-                entity_name not in self._instances
-                and entity_type == VsomeipTransport.VSOMEIPType.CLIENT
-            ):
-                self._configuration["applications"].append(
-                    {"id": str(len(self._instances)), "name": entity_name}
-                )
+            if entity_name not in self._instances and entity_type == VsomeipTransport.VSOMEIPType.CLIENT:
+                self._configuration["applications"].append({"id": str(len(self._instances)), "name": entity_name})
                 self._configuration["clients"].append(
                     {
                         "instance": str(self.INSTANCE_ID),
@@ -205,18 +195,14 @@ class VsomeipTransport(UTransport, RpcClient):
         if entity_name in self._instances:
             return self._instances[entity_name]
 
-    def _invoke_handler(
-        self, message_type: int, _: int, __: int, data: bytearray, request_id: int
-    ) -> bytearray:
+    def _invoke_handler(self, message_type: int, _: int, __: int, data: bytearray, request_id: int) -> bytearray:
         """
         callback for RPC method to set Future
         """
         if message_type == vsomeip.vSOMEIP.Message_Type.REQUEST.value:
             return
 
-        req_id = LongUuidSerializer.instance().serialize(
-            self._requests[request_id].attributes.id
-        )
+        req_id = LongUuidSerializer.instance().serialize(self._requests[request_id].attributes.id)
         parsed_message = UMessage(
             payload=UPayload(
                 value=bytes(data),
@@ -230,9 +216,7 @@ class VsomeipTransport(UTransport, RpcClient):
         else:
             _logger.info("Future result state is already finished or cancelled")
 
-    def _on_event_handler(
-        self, message_type: int, service_id: int, event_id: int, data: bytearray, _: int
-    ) -> None:
+    def _on_event_handler(self, message_type: int, service_id: int, event_id: int, data: bytearray, _: int) -> None:
         """
         handle responses from service with callback to listener registered
         """
@@ -247,9 +231,7 @@ class VsomeipTransport(UTransport, RpcClient):
             hint = UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY
             message_payload = UPayload(value=payload_data, hint=hint)
 
-        parsed_message = UMessage(
-            payload=message_payload, attributes=message.attributes
-        )
+        parsed_message = UMessage(payload=message_payload, attributes=message.attributes)
 
         for _, listener in self._registers[service_id][event_id]:
             if listener:
@@ -278,9 +260,7 @@ class VsomeipTransport(UTransport, RpcClient):
             hint = UPayloadFormat.UPAYLOAD_FORMAT_PROTOBUF_WRAPPED_IN_ANY
             message_payload = UPayload(value=payload_data, hint=hint)
 
-        parsed_message = UMessage(
-            payload=message_payload, attributes=message.attributes
-        )
+        parsed_message = UMessage(payload=message_payload, attributes=message.attributes)
 
         for _, listener in self._registers[service_id][method_id]:
             if listener:
@@ -288,9 +268,7 @@ class VsomeipTransport(UTransport, RpcClient):
 
         return None
 
-    def _for_response_handler(
-        self, message_type: int, _: int, __: int, ___: bytearray, request_id: int
-    ) -> bytearray:
+    def _for_response_handler(self, message_type: int, _: int, __: int, ___: bytearray, request_id: int) -> bytearray:
         """
         Return from the send response set for the response of the initial request message
         """
@@ -314,9 +292,7 @@ class VsomeipTransport(UTransport, RpcClient):
             del self._responses[req_id][0]
             break
 
-        return bytearray(
-            response_data
-        )  # note:  return data is what is sent over transport (i.e. someip) as response
+        return bytearray(response_data)  # note:  return data is what is sent over transport (i.e. someip) as response
 
     def send(self, message: UMessage) -> UStatus:
         """
@@ -331,9 +307,7 @@ class VsomeipTransport(UTransport, RpcClient):
             status = UriValidator.validate(uri)
             if status.is_failure():
                 return status.to_status()
-            instance = self._get_instance(
-                uri.entity, VsomeipTransport.VSOMEIPType.SERVICE
-            )
+            instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
 
             event_id = uri.resource.id
             service_id = uri.entity.id
@@ -354,17 +328,13 @@ class VsomeipTransport(UTransport, RpcClient):
             status = UriValidator.validate(uri)
             if status.is_failure():
                 return status.to_status()
-            instance = self._get_instance(
-                uri.entity, VsomeipTransport.VSOMEIPType.CLIENT
-            )
+            instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
 
             method_id = uri.resource.id
             payload_data = bytearray(message.payload.value)
             try:
                 request_id = instance.request(id=method_id, data=payload_data)
-                self._requests[request_id] = (
-                    message  # Important: in memory ONLY, thus stored per application level
-                )
+                self._requests[request_id] = message  # Important: in memory ONLY, thus stored per application level
             except Exception as ex:
                 return UStatus(message=str(ex), code=UCode.UNKNOWN)
             return UStatus(message="request", code=UCode.OK)
@@ -409,19 +379,11 @@ class VsomeipTransport(UTransport, RpcClient):
 
         try:
             if is_method:
-                instance = self._get_instance(
-                    uri.entity, VsomeipTransport.VSOMEIPType.SERVICE
-                )
-                instance.on_message(
-                    resource_id, self._on_method_handler
-                )  # handles the UListener
-                instance.on_message(
-                    resource_id, self._for_response_handler
-                )  # handles returning a response of data
+                instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.SERVICE)
+                instance.on_message(resource_id, self._on_method_handler)  # handles the UListener
+                instance.on_message(resource_id, self._for_response_handler)  # handles returning a response of data
             else:
-                instance = self._get_instance(
-                    uri.entity, VsomeipTransport.VSOMEIPType.CLIENT
-                )
+                instance = self._get_instance(uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
                 instance.on_event(resource_id, self._on_event_handler)
         except Exception as err:
             return UStatus(message=str(err), code=UCode.UNKNOWN)
@@ -439,9 +401,7 @@ class VsomeipTransport(UTransport, RpcClient):
         :return: Returns UStatus with UCode.OK if the listener is unregistered
         correctly, otherwise it returns with the appropriate failure.
         """
-        instance = self._get_instance(
-            topic.entity, VsomeipTransport.VSOMEIPType.SERVICE
-        )
+        instance = self._get_instance(topic.entity, VsomeipTransport.VSOMEIPType.SERVICE)
         service_id = topic.entity.id
         event_id = topic.resource.id
         try:
@@ -454,9 +414,7 @@ class VsomeipTransport(UTransport, RpcClient):
             return UStatus(message=str(err), code=UCode.UNKNOWN)
         return UStatus(message="unregister listener", code=UCode.OK)
 
-    def invoke_method(
-        self, method_uri: UUri, request_payload: UPayload, options: CallOptions
-    ) -> Future:
+    def invoke_method(self, method_uri: UUri, request_payload: UPayload, options: CallOptions) -> Future:
         """
         API for clients to invoke a method (send an RPC request) and
         receive the response (the returned Future UMessage).
@@ -479,12 +437,8 @@ class VsomeipTransport(UTransport, RpcClient):
             raise ValueError("TTl is invalid or missing")
 
         source = self._source
-        attributes = UAttributesBuilder.request(
-            source, method_uri, UPriority.UPRIORITY_CS4, options.ttl
-        ).build()
-        instance = self._get_instance(
-            method_uri.entity, VsomeipTransport.VSOMEIPType.CLIENT
-        )
+        attributes = UAttributesBuilder.request(source, method_uri, UPriority.UPRIORITY_CS4, options.ttl).build()
+        instance = self._get_instance(method_uri.entity, VsomeipTransport.VSOMEIPType.CLIENT)
         method_id = method_uri.resource.id
         uuid = LongUuidSerializer.instance().serialize(attributes.id)
 

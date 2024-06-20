@@ -12,27 +12,28 @@ terms of the Apache License Version 2.0 which is available at
 SPDX-License-Identifier: Apache-2.0
 """
 
-from datetime import datetime
-
-"""
-RPC Example
-"""
 import logging
 import time
+from datetime import datetime
 from typing import List
 
+from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.proto.umessage_pb2 import UMessage
 from uprotocol.proto.upayload_pb2 import UPayload, UPayloadFormat
 from uprotocol.proto.uri_pb2 import UEntity, UUri
-from uprotocol.proto.uattributes_pb2 import CallOptions
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
 from uprotocol.transport.ulistener import UListener
 from uprotocol.uri.factory.uresource_builder import UResourceBuilder
+
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper, VsomeipTransport
 
 logger = logging.getLogger()
 LOG_FORMAT = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.getLevelName("DEBUG"))
+
+"""
+RPC Example
+"""
 
 
 class Helper(VsomeipHelper):
@@ -78,9 +79,7 @@ class RPCRequestListener(UListener):
         sink = attributes.sink
         logger.debug(f"Receive {value} from {source} to {sink}")
         response_payload = format(datetime.utcnow()).encode("utf-8")
-        payload = UPayload(
-            value=response_payload, format=UPayloadFormat.UPAYLOAD_FORMAT_TEXT
-        )
+        payload = UPayload(value=response_payload, format=UPayloadFormat.UPAYLOAD_FORMAT_TEXT)
         attributes = UAttributesBuilder.response(msg.attributes).build()
         someip.send(UMessage(attributes=attributes, payload=payload))
 

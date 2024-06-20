@@ -12,26 +12,27 @@ terms of the Apache License Version 2.0 which is available at
 SPDX-License-Identifier: Apache-2.0
 """
 
-"""
-Publish Subscribe Example
-"""
 import logging
 import time
 from typing import List
 
-from uprotocol.transport.ulistener import UListener
-from uprotocol.proto.uri_pb2 import UUri, UAuthority, UEntity, UResource
-from uprotocol.proto.umessage_pb2 import UMessage
-from uprotocol.proto.ustatus_pb2 import UStatus
-from uprotocol.proto.upayload_pb2 import UPayloadFormat, UPayload
 from uprotocol.proto.uattributes_pb2 import UPriority
+from uprotocol.proto.umessage_pb2 import UMessage
+from uprotocol.proto.upayload_pb2 import UPayload, UPayloadFormat
+from uprotocol.proto.uri_pb2 import UEntity, UResource, UUri
+from uprotocol.proto.ustatus_pb2 import UStatus
 from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport, VsomeipHelper
+from uprotocol.transport.ulistener import UListener
 
+from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper, VsomeipTransport
 
 logger = logging.getLogger()
 LOG_FORMAT = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.getLevelName("DEBUG"))
+
+"""
+Publish Subscribe Example
+"""
 
 
 class Helper(VsomeipHelper):
@@ -54,7 +55,7 @@ class Helper(VsomeipHelper):
 someip = VsomeipTransport(helper=Helper())
 uuri = UUri(
     entity=UEntity(name="publisher", id=1, version_major=1, version_minor=1),
-    resource=UResource(name="door", instance="front_left", message="Door", id=5)
+    resource=UResource(name="door", instance="front_left", message="Door", id=5),
 )
 
 
@@ -64,9 +65,7 @@ def publish():
     """
     data = "Hello World!"
     attributes = UAttributesBuilder.publish(uuri, UPriority.UPRIORITY_CS4).build()
-    payload = UPayload(
-        value=data.encode("utf-8"), format=UPayloadFormat.UPAYLOAD_FORMAT_TEXT
-    )
+    payload = UPayload(value=data.encode("utf-8"), format=UPayloadFormat.UPAYLOAD_FORMAT_TEXT)
     message = UMessage(attributes=attributes, payload=payload)
     logger.debug(f"Sending {data} to {uuri}...")
     someip.send(message)
