@@ -23,13 +23,18 @@ class VsomeipHelper:
 
     @dataclass
     class UEntityInfo:
-        """ """
+        """
+        UEntityInfo
+        """
 
-        Name: str
-        Id: int
-        Events: List[int]
-        Port: int
-        MajorVersion: int
+        service_id: int
+        events: List[int]
+        port: int
+        major_version: int
 
     def services_info(self) -> List[UEntityInfo]:
+        """
+        services_info
+        :return: List of services
+        """
         return []

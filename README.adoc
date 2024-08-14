@@ -66,20 +66,19 @@ $ python setup.py bdist_wheel
 
 === Usage
 
-$ pip install uprotocol_vsomeip_python-0.1.0.dev0-py3-none-any.whl
+$ pip install uprotocol_vsomeip_python-0.2.0.dev0-py3-none-any.whl
 
 uPClient vsomeip Transport
 
 [source]
 ----
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipTransport
-from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper
+from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper, VsomeipTransport
 
 # Create a helper class and override the services_info method to start the mock services by Vsomeip
 class Helper(VsomeipHelper):
 
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
-        return [VsomeipHelper.UEntityInfo(Name="entity", Id=1, Events=[0, 1, 2, 3, 4, 5, 6, 7, 8, 10], Port=30509, MajorVersion=1)]
+        return [VsomeipHelper.UEntityInfo(Name="entity", Id=1, Events=[0x8000], Port=30509, MajorVersion=1)]
 
 # Create an object of Vsomeip transport to use and pass on the above helper class created
 someip = VsomeipTransport(helper=Helper())

@@ -12,27 +12,24 @@ terms of the Apache License Version 2.0 which is available at
 SPDX-License-Identifier: Apache-2.0
 """
 
+import asyncio
 import logging
 import time
 from typing import List
 
-from uprotocol.proto.uattributes_pb2 import UPriority
-from uprotocol.proto.umessage_pb2 import UMessage
-from uprotocol.proto.upayload_pb2 import UPayload, UPayloadFormat
-from uprotocol.proto.uri_pb2 import UEntity, UResource, UUri
-from uprotocol.proto.ustatus_pb2 import UStatus
-from uprotocol.transport.builder.uattributesbuilder import UAttributesBuilder
+from uprotocol.communication.upayload import UPayload
+from uprotocol.transport.builder.umessagebuilder import UMessageBuilder
 from uprotocol.transport.ulistener import UListener
+from uprotocol.v1.uattributes_pb2 import UPayloadFormat
+from uprotocol.v1.umessage_pb2 import UMessage
+from uprotocol.v1.uri_pb2 import UUri
+from uprotocol.v1.ustatus_pb2 import UStatus
 
 from uprotocol_vsomeip.vsomeip_utransport import VsomeipHelper, VsomeipTransport
 
 logger = logging.getLogger()
 LOG_FORMAT = "%(asctime)s [%(levelname)s] @ %(filename)s.%(module)s.%(funcName)s:%(lineno)d \n %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.getLevelName("DEBUG"))
-
-"""
-Publish Subscribe Example
-"""
 
 
 class Helper(VsomeipHelper):
@@ -43,32 +40,27 @@ class Helper(VsomeipHelper):
     def services_info(self) -> List[VsomeipHelper.UEntityInfo]:
         return [
             VsomeipHelper.UEntityInfo(
-                Name="publisher",
-                Id=1,
-                Events=[0, 1, 2, 3, 4, 5, 6, 7, 8, 10],
-                Port=30509,
-                MajorVersion=1,
+                service_id=1,
+                events=[0x8000],
+                port=30509,
+                major_version=1,
             )
         ]
 
 
-someip = VsomeipTransport(helper=Helper())
-uuri = UUri(
-    entity=UEntity(name="publisher", id=1, version_major=1, version_minor=1),
-    resource=UResource(name="door", instance="front_left", message="Door", id=5),
-)
+someip = VsomeipTransport(helper=Helper(), source=UUri(ue_id=1, ue_version_major=1, resource_id=0))
+uuri = UUri(ue_id=1, ue_version_major=1, resource_id=0x8000)
 
 
-def publish():
+async def publish():
     """
     Publish data to a topic
     """
     data = "Hello World!"
-    attributes = UAttributesBuilder.publish(uuri, UPriority.UPRIORITY_CS4).build()
-    payload = UPayload(value=data.encode("utf-8"), format=UPayloadFormat.UPAYLOAD_FORMAT_TEXT)
-    message = UMessage(attributes=attributes, payload=payload)
-    logger.debug(f"Sending {data} to {uuri}...")
-    someip.send(message)
+    payload = UPayload.pack_from_data_and_format(data.encode("utf-8"), UPayloadFormat.UPAYLOAD_FORMAT_TEXT)
+    message = UMessageBuilder.publish(uuri).build_from_upayload(payload)
+    logger.debug("Sending %s to %s...", data, uuri)
+    await someip.send(message)
 
 
 class MyListener(UListener):
@@ -76,7 +68,7 @@ class MyListener(UListener):
     Listener class to define callback
     """
 
-    def on_receive(self, message: UMessage) -> UStatus:
+    async def on_receive(self, message: UMessage) -> UStatus:
         """
         on_receive call back method
         :param message:
@@ -84,8 +76,8 @@ class MyListener(UListener):
         """
         logger.debug(
             "listener -> id: %s, data: %s",
-            message.attributes.source.resource.id,
-            message.payload.value,
+            message.attributes.source.resource_id,
+            message.payload,
         )
         return UStatus(message="Received event")
 
@@ -93,26 +85,33 @@ class MyListener(UListener):
 listener = MyListener()
 
 
-def subscribe():
+async def subscribe():
     """
     Subscribe to a topic
     """
-    someip.register_listener(uuri, listener)
+    await someip.register_listener(source_filter=uuri, listener=listener)
 
 
-def unsubscribe():
+async def unsubscribe():
     """
     Unsubscribe to a topic
     """
-    someip.unregister_listener(uuri, listener)
+    await someip.unregister_listener(source_filter=uuri, listener=listener)
+
+
+async def main() -> None:
+    """
+    Main function to demonstrate publish and subscribe
+    """
+    await subscribe()
+    time.sleep(1)
+    await publish()
+    time.sleep(5)
+    await unsubscribe()
+    time.sleep(1)
+    await publish()
+    time.sleep(5)
 
 
 if __name__ == "__main__":
-    subscribe()
-    time.sleep(1)
-    publish()
-    time.sleep(5)
-    unsubscribe()
-    time.sleep(1)
-    publish()
-    time.sleep(5)
+    asyncio.run(main())
